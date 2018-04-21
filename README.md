@@ -83,4 +83,80 @@ server.post('/alerts', (req, res) => {
 });
 ```
 
-3. Create file called package.json
+3. Create file called package.json and paste the following contents.
+
+```javascript
+{
+  "name": "GAB2018",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "author": "Da Cloud",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv-extended": "^1.0.4",
+    "restify": "^4.3.2"
+  }
+}
+```
+
+4. Within a command windows in that same directory type:   **npm install**  (you can ignore any warnings that occur)
+5. In that same command window, type **npm start** and you now have a web server running on your local machine at port 3939.
+6. In a browser window navigate to **http://localhost:3939/ping** and you should get a message indicating the server is alive.
+
+### Make Your Web Service Accessible from the Internet
+We want the Service Bus alert (in the cloud) to eventually cause an HTTP request to arrive at your machine, so we need to create a tunnel into your localhost service. Ngrok.io is an easy, and free way to do so, and you'll likely use ngrok for a lot of services debugging, etc. in your cloud development future!
+
+Download ngrok from [ngrok.io](https://ngrok.com/download).  You can skip the "Connect your account" step.
+
+Run the command **ngrok http 3939** and you should see output similar to:
+
+```
+Session Status                online
+Account                       Jim O'Neil (Plan: Basic)
+Version                       2.2.8
+Region                        United States (us)
+Web Interface                 http://127.0.0.1:4040
+Forwarding                    http://fed4257f.ngrok.io -> localhost:3939
+Forwarding                    https://fed4257f.ngrok.io -> localhost:3939
+
+Connections                   ttl     opn     rt1     rt5     p50     p90
+                              0       0       0.00    0.00    0.00    0.00
+```
+
+Note the forwarding URLs.  You should now be able to use the fowarding URL (instead of http://localhost:3939) to access your web server. You know have a pathway to your client machine from anywhere on the internet!
+
+### Create an Azure Function
+You will use an Azure function to consume the messages on the Service Bus and "inform" the client (via an HTTP request to your local server) of the alert condition.
+
+In the Azure Portal, add a new _Function App_. Note that a new storage account will be created by default to support Azure Functions, that's fine.
+
+Open the New Function App in the Azure Portal and add a new function via the navigation tree on the left. Create a new "Custom Function" via the link under the "Get started on you own" heading. From the tiles presented, select the _Javascript_ link from the _Service Bus Queue trigger_ tile. 
+
+For the _Service Bus connection_ field, select the "new" link and you will be able to select your service bus and policy. Change _Access Rights_ to listen, since this function should only receive events from the queue.  For _Queue name_ enter _alerts_, the name of the queue you created along with the service bus. Of course, feel free to chance the function name to something less obtuse. When you create the function, you'll be provided an editing and testing experience directly with the portal. For the labs, this is sufficient, but for "real code" you'll likely use Visual Studio or Visual Studio Code with additional developer tooling extensions for those products.
+
+Replace the generated code with the following - be sure to modify the ngrok URL with your specific ngrok endpoint
+
+```Javascript
+module.exports = function(context, mySbMsg) {
+
+    // must npm install in Kudo
+    var request = require('request');
+
+    module.exports = function(context, mySbMsg) {
+        request({
+            url: 'http://{YOUR NGROK SUBDOMAIN}.ngrok.io/alerts',
+            method: 'POST',
+            json: mySbMsg
+        }, function(error, response, body){
+            console.log(response);
+            context.done();
+        });
+    };
+};
+```
+
+If you run the function, you will get an error regarding the _request_ module, since it is not installed in the Function app. To fix this, navigate to your Function App in the root of the tree on the left sidebar, and then select _Platform Features_ from the tabbed blade on the right.
+
+Under _DEVELOPMENT TOOLS_, select _Console_ and in the console type  ``npm install -g request``

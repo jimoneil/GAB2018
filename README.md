@@ -127,7 +127,7 @@ Connections                   ttl     opn     rt1     rt5     p50     p90
 
 Note the forwarding URLs.  You should now be able to use the fowarding URL (instead of http://localhost:3939) to access your web server. You know have a pathway to your client machine from anywhere on the internet!
 
-### Create an Azure Function
+### Create an Azure Alert Function
 You will use an Azure function to consume the messages on the Service Bus and "inform" the client (via an HTTP request to your local server) of the alert condition.
 
 In the Azure Portal, add a new _Function App_. Note that a new storage account will be created by default to support Azure Functions, that's fine.
@@ -154,10 +154,57 @@ module.exports = function(context, mySbMsg) {
 };
 ```
 
-If you run the function, you will get an error regarding the _request_ module, since it is not installed in the Function app. To fix this, navigate to your Function App in the root of the tree on the left sidebar, and then select _Platform Features_ from the tabbed blade on the right.
+If you run the function within the Azure Portal, you will get an error (in the Logs window below the function source) regarding the _request_ module, since it has not been installed in the Function app. To fix this, navigate to your Function App in the root of the tree on the left sidebar, and then select _Platform Features_ from the tabbed blade on the right.
 
 Under _DEVELOPMENT TOOLS_, select _Console_ and in the console type  
 
 	cd [name of your function]
 	
 	npm install -g request
+
+Ignore any warnings, and confirm that the error no longer occurs when running the function from the Azure Portal. In fact, you should now see a line like this in the console window where you started your local web server application:
+
+	*** ALERT: It's getting too hot undefined C ***
+	
+The _undefined_ text is because the Run/Test function in the Azure Portal does not have a _Request body_ that conforms to the message we are expecting.
+
+At this point, once the device has reached the trigger temperature, you should automatically see the alert messages on your client application (here the local webserver).
+
+### Use Stream Analytics to Aggregate Events
+Next, we'll use Stream Analytics to provide some aggregation of the temperature data. Instead of forwarding on every individual temperature reading, we'll provide an average reading over the last minute, and only that information will be passed forward.
+
+Since Stream Analytics will be viewing the same incoming messages as Time Series Insights, we have to first make sure they each get to see all of the messages. Within the IoT Hub service, navigate again to the **Endpoints** blade and select the built-in _Events_ endpoint. In the _Properties_ add a new Consumer Group called _streamAnalytics_. The existing _$Default_ group is the one being used by Time Series Insights, so we need a new group to ensure that Stream Analytics and Time Series Insights each get a complete set of the events.
+
+Now create a new Stream Analytics Job leaving the default _Hosting environment_ of Cloud. After the services is provisioned, create a new _Input_ on the **Overview** blade. The input will be the new consumer group that you just created on the IoTHub. Be sure to change the _Consumer Group_ from _$Default_!!
+
+As the messages come in, we will use a query to aggregate them over a tumbling windows of 1 minute, so an average temperature is emitted every minute, and save those values in a SQL Database.
+
+For this lab, we'll use a single SQL Database to house all of the data. This is just to save some time provisioning a standard SQL database and creating a table. If you wish to provision your own server/database, you'll need to create the telemetry table as well using the following SQL:
+
+	CREATE TABLE [dbo].[telemetry](
+		[windowEnd] [datetime2](7) NOT NULL,
+		[deviceId] [nvarchar](max) NOT NULL,
+		[temperature] [float] NOT NULL
+	)
+
+For the Output definition in the Stream Analytics job, use the following data, which reflects the preprovisioned server (substitute accordingly if you created your own service).
+
+	Output alias: sqldatabase
+	Database: gabiot
+	Server name: gabiot.database.windows.net
+	Username: sqladmin
+	Password: GlobalAzure2018
+	Table: telemetry
+	
+Note there is a Test link at the top of the _Properties_ blade in the Azure Portal that you can use to confirm connectivity.
+
+Now that inputs and outputs are defined, you can use the following code for the query. Note that this codes assumes your Stream Analytics input is named _IotHub_ and the output is named _sqldatabase_
+
+	SELECT System.TimeStamp AS windowEnd, deviceId, AVG(temperature) AS temperature
+	INTO sqldatabase
+	FROM iothub TIMESTAMP BY EventProcessedUtcTime
+	GROUP BY deviceId, TumblingWindow(second, 60) 
+
+Now start the Stream Analytics Job; this will take several minutes.  Once it has started, records will be inserted into the database at a rate of on every 30 seconds using the average temperature over that period.
+
+

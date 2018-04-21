@@ -33,6 +33,54 @@ Open your IoT Hub instance in the Azure Portal and select the **Endpoints** blad
 Next select the **Routes** blade for your IoT Hub and add a new Route called _archiveRoute_, with a source of _Device Messages_ and an _Endpoint_ of _archiveEP_.  After a minute or so, you should be able to navigate to your blob storage account at __https://{accountName}.blob.core.windows.net/archive?restype=container&comp=list__ and see the list of files create to archive your event. You can copy and paste a specific file (blob) URL to see that the contents of the file are the raw event data in Avro format.
 
 ### "Fix" Time Series Insights
-Because we've routed all events to blob storage, the events are no longer sent to Time Series Insights, so create a new Route that accps all Device Events and routes them back to the built-in _events_ endpoint, which is where Time Series Insights expect to access its data. IoT Hub will match and send events to every route it matches; however, if it does match a route it does not, by default, send that same message back to the built-in _events_ endpoint. 
+Because we've routed all events to blob storage, the events are no longer sent to Time Series Insights, so create a new IoT Hub Route (called _everything_) that accepts all Device Events and routes them back to the built-in _events_ endpoint, which is where Time Series Insights expect to access its data. (IoT Hub will match and send events to every route it matches; however, if it does match a route it does not, by default, send that same message back to the built-in _events_ endpoint.)
 
-## Consume Events from a Device
+## Process Device Events in the Cloud
+
+### Create a Service Bus Instance and Queue
+Service Bus queues and topics are often used in cloud architectures to queue up work items for further process. You'll use a queue here to process alert conditions that arrive at IoT Hub. In the Azure Portal, provision a new Service Bus instance in the same Resource Group you've been using.
+
+After the Service Bus has been provisioned, add a new Queue named _alerts_.  Leave the various properties at their defaults and specifically do **not** enable duplicate detection or sessions, since those will not be compatible with your use of this queue.
+
+### Add a IoT Hub Route to the Queue
+In your IoT Hub instance, add a new _Endpoint_ called _alertsEP_ that references the Service Bus Queue just created.
+
+Now create a new route called _alertsRoute_ that uses _Device Events_ as the _Data Source_ and your new Service Bus queue (_alertsEP_) as the _Endpoint_.
+
+In previous routes, the _Query String_ was left blank, indicating all events would be processed on a given route. Here, you want to forward only those events where the temperature is out of range. That condition is captureed in a header of the messages sent from the device. The header name is _temperatureAlert_ and it has a value of 'true' or 'false' (as a string). So the _Query string_ needed here is *temperatureAlert = 'true'*
+
+You can see if alert messages are reaching your queue by selecting the queue in the Service Bus **Overview** blade and it should bring up a graphical view of the queue including an _Active Message Count_ that reflects the number of alert messages received.
+
+### Build a Local Notification Endpoint Service
+This part of the experience is a little contrived to reduce complexity. In a production scenario, you would use notification technologies like SignalR or Notification Hubs to inform clients about alert conditions. Here you will run a small Node.js server that exposes an endpoint triggered whenever an alert message hits your Service Bus queue.
+
+1. If you do not have Node for Windows installed, do so from [nodejs.org](https://nodejs.org/en/download/) using the Windows Installer .msi option corresponding to your OS bitness.
+1. On your local machine create a directory of your own choosing.
+2. Create a file in that directory called index.js and the following contents:
+
+```javascript
+// load env variables
+require('dotenv-extended').load();
+
+const restify = require('restify');
+
+// setup our web server
+const server = restify.createServer();
+server.listen(process.env.port || process.env.PORT || 3939, () => {
+    console.log('%s listening to %s', server.name, server.url);
+});
+
+server.use(restify.bodyParser({ mapParams: false }));
+
+server.get('/ping', (req, res) => {
+	console.log('Ping received');
+	res.send(200, 'I am alive');
+});
+
+server.post('/alerts', (req, res) => {
+	console.log('*** ALERT: It\'s getting too hot ' + req.body.temperature + ' C ***');
+	res.send(204);
+});
+```
+
+3. Create file called package.json

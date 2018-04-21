@@ -161,6 +161,6 @@ If you run the function, you will get an error regarding the _request_ module, s
 
 Under _DEVELOPMENT TOOLS_, select _Console_ and in the console type  
 
-	``cd [name of your function]``
+	cd [name of your function]
 	
-	``npm install -g request``
+	npm install -g request

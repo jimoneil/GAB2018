@@ -139,21 +139,18 @@ For the _Service Bus connection_ field, select the "new" link and you will be ab
 Replace the generated code with the following - be sure to modify the ngrok URL with your specific ngrok endpoint
 
 ```Javascript
+// must npm install in Kudo
+var request = require('request');
+
 module.exports = function(context, mySbMsg) {
-
-    // must npm install in Kudo
-    var request = require('request');
-
-    module.exports = function(context, mySbMsg) {
-        request({
-            url: 'http://{YOUR NGROK SUBDOMAIN}.ngrok.io/alerts',
-            method: 'POST',
-            json: mySbMsg
-        }, function(error, response, body){
-            console.log(response);
-            context.done();
-        });
-    };
+	request({
+	    url: 'http://{YOUR NGROK SUBDOMAIN}.ngrok.io/alerts',
+	    method: 'POST',
+	    json: mySbMsg
+	}, function(error, response, body){
+	    console.log(response);
+	    context.done();
+	});
 };
 ```
 

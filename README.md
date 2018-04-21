@@ -101,8 +101,8 @@ server.post('/alerts', (req, res) => {
 }
 ```
 
-4. Within a command windows in that same directory type:   **npm install**  (you can ignore any warnings that occur)
-5. In that same command window, type **npm start** and you now have a web server running on your local machine at port 3939.
+4. Within a command windows in that same directory type:  ``npm install``  (you can ignore any warnings that occur)
+5. In that same command window, type ``npm start`` and you now have a web server running on your local machine at port 3939.
 6. In a browser window navigate to **http://localhost:3939/ping** and you should get a message indicating the server is alive.
 
 ### Make Your Web Service Accessible from the Internet
@@ -159,4 +159,8 @@ module.exports = function(context, mySbMsg) {
 
 If you run the function, you will get an error regarding the _request_ module, since it is not installed in the Function app. To fix this, navigate to your Function App in the root of the tree on the left sidebar, and then select _Platform Features_ from the tabbed blade on the right.
 
-Under _DEVELOPMENT TOOLS_, select _Console_ and in the console type  ``npm install -g request``
+Under _DEVELOPMENT TOOLS_, select _Console_ and in the console type  
+
+	``cd [name of your function]``
+	
+	``npm install -g request``

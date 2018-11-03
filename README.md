@@ -25,12 +25,12 @@ Create a new Azure Storage account (labeled _Storage Acccount - blob, file, tabl
 
 When the service has finished provisioning, select the **Blobs** service in the center of the **Overview** blade. In the resulting blade, add a new Container named _archive_ and set the _Public access level_ to 'Container.' Note, we are doing this for the ease of the lab, and it is **not** recommended for a production application. Doing so makes the storage accessible via simple HTTP requests in a browser.
 
-Within the new container named _archive_ upload some file from your local machine, preferably a short text or image file. After the file has been uploaded, select the file name in  **Container** blade to bring up the blob properties blade.  Cpoy the URL of the blob and paste it into a browser. You should see the content of the file that you just uploaded - confirming the _Public access level_ policy.
+Within the new container named _archive_ upload some file from your local machine, preferably a short text or image file. After the file has been uploaded, select the file name in  **Container** blade to bring up the blob properties blade.  Copy the URL of the blob and paste it into a browser. You should see the content of the file that you just uploaded - confirming the _Public access level_ policy.
 
 ### Save incoming events to blob storage
-Open your IoT Hub instance in the Azure Portal and select the **Endpoints** blade under _Messagine_. You will have two built-in endpoints _Cloud to device feedback_ and _Events_. Now create a new custom endpoint called _archiveEP_ and select _Azure Storage Container_ as the _Endpoint type_.  Pick the archive container you created in Azure blob storage in a previous step.  You can change the *Batch Frequency* to 60 seconds to minimize the time it will take to see new events within blob storage
+Open your IoT Hub instance in the Azure Portal and select the **Message Routing** blade under _Messaging_. Select _Add_ and _Blob storage_ as the endpoint type; call the new custom endpoint _archiveEP_.  Pick the archive container you created in Azure blob storage in a previous step.  You can change the *Batch Frequency* to 60 seconds to minimize the time it will take to see new events within blob storage
 
-Next select the **Routes** blade for your IoT Hub and add a new Route called _archiveRoute_, with a source of _Device Messages_ and an _Endpoint_ of _archiveEP_.  After a minute or so, you should be able to navigate to your blob storage account at __https://{accountName}.blob.core.windows.net/archive?restype=container&comp=list__ and see the list of files create to archive your event. You can copy and paste a specific file (blob) URL to see that the contents of the file are the raw event data in Avro format.
+Now select the _Routes_ tab in the same **Message Routing** blade. Add a new Route called _archiveRoute_ with an _Endpoint_ of _archiveEP_ and leave the source as _Device Telemetry Messages_. For the _Routing query_ enter the literal string _true_, which indicates that all messages should be routed to the endpoint. After a minute or so, you should be able to navigate to your blob storage account at __https://{accountName}.blob.core.windows.net/archive?restype=container&comp=list__ and see the list of files created to archive your events. You can copy and paste a specific file (blob) URL to see that the contents of the file are the raw event data in Avro format.
 
 ### "Fix" Time Series Insights
 Because we've routed all events to blob storage, the events are no longer sent to Time Series Insights, so create a new IoT Hub Route (called _everything_) that accepts all Device Events and routes them back to the built-in _events_ endpoint, which is where Time Series Insights expects to access its data. (IoT Hub will match and send events to every route it matches; however, if it does match a route it does not, by default, send that same message back to the built-in _events_ endpoint.)
@@ -47,7 +47,7 @@ In your IoT Hub instance, add a new _Endpoint_ called _alertsEP_ that references
 
 Now create a new route called _alertsRoute_ that uses _Device Events_ as the _Data Source_ and your new Service Bus queue (_alertsEP_) as the _Endpoint_.
 
-In previous routes, the _Query String_ was left blank, indicating all events would be processed on a given route. Here, you want to forward only those events where the temperature is out of range. That condition is captureed in a header of the messages sent from the device. The header name is _temperatureAlert_ and it has a value of 'true' or 'false' (as a string). So the _Query string_ needed here is *temperatureAlert = 'true'*
+In previous routes, the _Routing query_ was set to _true_, indicating all events would be processed on a given route. Here, you want to forward only those events where the temperature is out of range. That condition is captured in a header of the messages sent from the device. The header name is _temperatureAlert_ and it has a value of 'true' or 'false' (as a string). So the _Query string_ needed here is *temperatureAlert = 'true'*
 
 You can see if alert messages are reaching your queue by selecting the queue in the Service Bus **Overview** blade and it should bring up a graphical view of the queue including an _Active Message Count_ that reflects the number of alert messages received.
 
@@ -56,7 +56,7 @@ This part of the experience is a little contrived to reduce complexity. In a pro
 
 1. If you do not have Node for Windows installed, do so from [nodejs.org](https://nodejs.org/en/download/) using the Windows Installer .msi option corresponding to your OS bitness.
 1. On your local machine create a directory of your own choosing.
-2. Create a file in that directory called index.js and the following contents:
+2. Create a file in that directory called app.js and the following contents:
 
 ```javascript
 // load env variables
@@ -101,7 +101,7 @@ server.post('/alerts', (req, res) => {
 }
 ```
 
-4. Within a command window in that same directory type:  ``npm install``  (you can ignore any warnings that occur)
+4. Within a command window - that you have _Run as administrator_ - in that same directory type:  ``npm install``  (you can ignore any warnings that occur)
 5. In that same command window, type ``npm start`` and you now have a web server running on your local machine at port 3939.
 6. In a browser window navigate to **http://localhost:3939/ping** and you should get a message indicating the server is alive.
 
@@ -130,13 +130,13 @@ Note the forwarding URLs.  You should now be able to use the fowarding URL (inst
 ### Create an Azure Alert Function
 You will use an Azure function to consume the messages on the Service Bus and "inform" the client (via an HTTP request to your local server) of the alert condition.
 
-In the Azure Portal, add a new _Function App_. Note that a new storage account will be created by default to support Azure Functions, that's fine.
+In the Azure Portal, add a new _Function App_ and **set the _Hosting Plan_ to "App Service plan" _Runtime Stack_ to "JavaScript"**. You will need to supply an existing App Service plan or create a new one. Note, that The portal also defaults to creating a new Resource Group, which isn't a problem per se, but your App Service may not be under the Resource Group you intended. Lastly, note that a new storage account will be created by default to support Azure Functions; that's fine.
 
-Open the New Function App in the Azure Portal and add a new function via the navigation tree on the left. Create a new "Custom Function" via the link under the "Get started on you own" heading. From the tiles presented, select the _Javascript_ link from the _Service Bus Queue trigger_ tile. 
+Open the New Function App in the Azure Portal and add a new function via the navigation tree on the left. Create a new "In-portal" function under the "Azure Functions for JavaScript - getting started" heading. Press the "Continue" button, and next select "More templates...", then press the "Finish and view templates" button. From the options presented, select _Azure Service Bus Queue trigger_. If you are prompted to install the _Microsoft.Azure.WebJobs.Extensions.ServiceBus_ extensions, go ahead and do so; it may take a minute or two before it completes.
 
-For the _Service Bus connection_ field, select the "new" link and you will be able to select your service bus and policy. Change _Access Rights_ to listen, since this function should only receive events from the queue.  For _Queue name_ enter _alerts_, the name of the queue you created along with the service bus. Of course, feel free to chance the function name to something less obtuse. When you create the function, you'll be provided an editing and testing experience directly with the portal. For the labs, this is sufficient, but for "real code" you'll likely use Visual Studio or Visual Studio Code with additional developer tooling extensions for those products.
+For the _Service Bus connection_ field, select the "new" link and you will be able to select your service bus namespace and policy. You can use the default service bus owner policy for this demo, but for a production application you would define a policy that granted only _Listen_ access (in line with the principle of least privilege).  For _Queue name_ enter _alerts_, the name of the queue you created along with the service bus. Of course, feel free to change the function name to something less obtuse. When you create the function, you'll be provided an editing and testing experience directly within the portal. For the labs, this is sufficient, but for "real code" you'll likely use Visual Studio or Visual Studio Code which have additional developer tooling extensions.
 
-Replace the generated code with the following - be sure to modify the ngrok URL with your specific ngrok endpoint
+Replace the generated code with the following - be sure to modify the request URL with your specific ngrok subdomain
 
 ```Javascript
 // must npm install in Kudo
@@ -154,12 +154,8 @@ module.exports = function(context, mySbMsg) {
 };
 ```
 
-If you run the function within the Azure Portal, you will get an error (in the Logs window below the function source) regarding the _request_ module, since it has not been installed in the Function app. To fix this, navigate to your Function App in the root of the tree on the left sidebar, and then select _Platform Features_ from the tabbed blade on the right.
+If you run the function within the Azure Portal, you will get an error (in the Logs window below the function source) regarding the _request_ module, since it has not been installed in the Function app. To fix this, select the Console tab below your function code. and type
 
-Under _DEVELOPMENT TOOLS_, select _Console_ and in the console type  
-
-	cd [name of your function]
-	
 	npm install -g request
 
 Ignore any warnings, and confirm that the error no longer occurs when running the function from the Azure Portal. In fact, you should now see a line like this in the console window where you started your local web server application:
@@ -167,6 +163,23 @@ Ignore any warnings, and confirm that the error no longer occurs when running th
 	*** ALERT: It's getting too hot undefined C ***
 	
 The _undefined_ text is because the Run/Test function in the Azure Portal does not have a _Request body_ that conforms to the message we are expecting.
+
+---
+##NOTE
+
+As of November 2018, this was not longer working reliably. If this is the case for you, upload a _package.json_ file with the following contents via the _Platform features > Advanced tools (Kudu)_ option, and then restart the function app.
+
+
+```Javascript
+{
+  "name": "alertFunction",
+  "version": "1.0.0",
+  "dependencies": {
+    "request": "*"
+  }
+}
+```
+---
 
 At this point, once the device has reached the trigger temperature, you should automatically see the alert messages on your client application (here the local webserver).
 

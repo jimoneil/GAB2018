@@ -165,7 +165,7 @@ Ignore any warnings, and confirm that the error no longer occurs when running th
 The _undefined_ text is because the Run/Test function in the Azure Portal does not have a _Request body_ that conforms to the message we are expecting.
 
 ---
-##NOTE
+## NOTE
 
 As of November 2018, this was not longer working reliably. If this is the case for you, upload a _package.json_ file with the following contents via the _Platform features > Advanced tools (Kudu)_ option, and then restart the function app.
 
